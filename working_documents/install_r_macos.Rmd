@@ -27,12 +27,12 @@ Open Terminal.app to run the shell commands in the instructions below:
 1.  Make your account own the R framework folder (created when installing R from 
 the binary)
     ```{sh}
-sudo chown -R $USER /Library/Frameworks/R.framework/
+    sudo chown -R $USER /Library/Frameworks/R.framework/
     ```
-2. Make your account own `/opt/R` so that we can install prerequisites for 
+2.  Make your account own `/opt/R` so that we can install prerequisites for 
 building from source with the `install.libs` R function described in the next subsection.
     ```{sh}
-sudo chown -R $USER /opt/R
+    sudo chown -R $USER /opt/R
     ```
     <details><summary><i>Details...</i></summary> If this is skipped, you get errors when 
 running `install.libs("r-base-dev")`, e.g. "Can't restore time", 
@@ -40,22 +40,17 @@ running `install.libs("r-base-dev")`, e.g. "Can't restore time",
     </details>
 3.  Open the profile for the Zsh shell 
     ```{sh}
-    open /Users/$USER/.zprofile
+    open ~/.zprofile
     ```
-    Add one of the following commands to the profile, selecting the one that 
-    matches your architecture:
+    Add one of the following commands to the profile:
     ```{sh}
-# Intel
-export PATH="/opt/R/x86_64/bin:${PATH}"
+    export PATH="/opt/R/$(uname -m)/bin:/opt/gfortran/bin:${PATH}"
     ```
-    ```{sh}
-# Apple Silicon (M1, M2, ...)
-export PATH="/opt/R/arm64/bin:${PATH}"
-    ```
-    This will add the `/opt/R/*/bin` directory to your `PATH` variable 
+    This will add the `/opt/R/*/bin` directory and GNU Fortran to your `PATH` variable 
     when you restart Terminal.app, so that the prerequisites 
-    installed with `install.libs` can be found.
-   <details><summary><i>Note if using RStudio terminal, or using Terminal.app on macOS < 10.15 (Catalina)...</i></summary> The code above assumes you are running shell commands in a Zsh shell (the default for Terminal.app on macOS &ge; 10.15). If you are using a bash shell, edit <code>.bash_profile</code> rather than <code>.zprofile</code>. The type of terminal in RStudio can be set in Terminal Options from the terminal or in Global Options.
+    installed with `install.libs` can be found. At thsi point re-start
+    your Terminal window (or open a new one).
+   <details><summary><i>Note if using RStudio terminal, or using Terminal.app on macOS < 10.15 (Catalina)...</i></summary> The code above assumes you are running shell commands in a Zsh shell (the default for Terminal.app on macOS &ge; 10.15). If you are using a bash shell, edit <code>.profile</code> rather than <code>.zprofile</code>. The type of terminal in RStudio can be set in Terminal Options from the terminal or in Global Options.
 </details>
 
 ### Install prerequisites
@@ -84,8 +79,8 @@ system2("which", "svn")
     ```{r}
 install.libs("subversion", dep = FALSE)
     ```
-    
-    <details><summary><i>Troubleshooting...</i></summary> If this does not work, try installing Subversion via your preferred package manager, e.g. with Homebrew: <code>brew install svn</code>.
+     
+    <details><summary><i>Troubleshooting...</i></summary>Please make sure you have restarted-your Terminal.app after changing the profile so your `PATH` changes are in effect. Check with `echo $PATH` to make sure it starts with `/opt/R..`. If this does not work, try installing Subversion via your preferred package manager, e.g. with Homebrew: `brew install svn`, but some Homebrew packages cause conflicts so only use as last resort. 
     </details>
     
 For the remaining instructions, code should be run within Terminal.app
@@ -99,15 +94,15 @@ for R and will be used in preference to any other version on your system.
     ```
     (If already installed, shows "xcode-select: error: command line tools are
 already installed").
-3.  Check if you have a current version of MacTeX installed:
+3.  Check if you have LaTeX installed:
     ```{sh}
-ls /usr/local/texlive
+	pdflatex --version | head -n1
+	```
+	It should show something like
     ```
-    If the `/usr/local/texlive` directory exists, you will see one or more subdirectories named by year, e.g.
+    pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023)
     ```
-    2022            2023            texmf-local
-    ```
-    If this check doesn't show a subdirectory for the current year, install MacTex from the binary at <https://tug.org/mactex/mactex-download.html>.
+    If it shows an error or the year is too old, install MacTex from the binary at <https://tug.org/mactex/mactex-download.html> (or install TinyTex if you prefer).
 4.  Check if you have XQuartz installed:
     ```{sh}
 mdls -name kMDItemVersion /Applications/Utilities/XQuartz.app
@@ -169,34 +164,21 @@ mkdir -p $BUILDDIR
 cd $BUILDDIR
     ```
 
-3.  Define the `LOCAL` environment variable to match your architecture
+3.  Define the `LOCAL` environment variable to match your architecture so you don't have to type the same path repeatedly
     ```{sh}
-# Intel
-export LOCAL=/opt/R/x86_64 
-    ```
-    ```{sh}
-# Apple Silicon (e.g. M1)
-export LOCAL=/opt/R/arm64  
+export LOCAL=/opt/R/$(uname -m)
     ```
     Create `config.site` within the build directory to set some configuration flags as recommended by the [R-admin manual](https://cran.r-project.org/doc/manuals/r-devel/R-admin.html#Prerequisites).
     ```{sh}
 cat << EOF > config.site
 CC=clang
-OBJC=\$CC
-FC="/opt/gfortran/bin/gfortran -mtune=native"
-CPPFLAGS='-isystem $LOCAL/include'
+OBJC=clang
+FC=/opt/gfortran/bin/gfortran
+CPPFLAGS="-I$LOCAL/include"
+CFLAGS="-g -O0 -Wall"
+LDFLAGS="-L$LOCAL/lib"
 CXX=clang++
-PKG_CONFIG_PATH=$LOCAL/lib/pkgconfig:/usr/lib/pkgconfig
-EOF
-    ```
-    Add the additional configuration flags if you are on Apple Silicon:
-    ```{sh}
-cat << EOF >> config.site
-CFLAGS="-falign-functions=8 -g -O0"
-FFLAGS="-g -O2 -mmacosx-version-min=11.0"
-FCFLAGS="-g -O2 -mmacosx-version-min=11.0"
-LDFLAGS="-L$LOCAL/lib -L/opt/gfortran/lib"
-CPPFLAGS="-isystem $LOCAL/include -I$LOCAL/include"
+PKG_CONFIG_PATH=$LOCAL/lib/pkgconfig:/usr/lib/pkgconfig:/opt/X11/lib/pkgconfig:/opt/X11/share/pkgconfig
 EOF
     ```
     <details><summary><i>Details...</i></summary> Some modifications to the recommendations in R-admin: `-O0` to enable debugging symbols and disable compiler optimisations for better debugging experience; `-mmacos-version-min` corrected [?] to `-mmacosx-version-min`; `LDFLAGS="-L$LOCAL/lib -L/opt/gfortran/lib"` added so that liblzma (in `$LOCAL/lib`) and gfortran libraries can be found. CPPFLAGS modified for Apple Silicon to link to the headers for liblzma.
@@ -222,6 +204,8 @@ The configure options in [R-admin manual](https://cran.r-project.org/doc/manuals
     ```{sh}
 make
     ```
+    (If you have a multi-core machine you can add `-j12` or simialar for your initial build where 12 is the number of cores to use in parallel. You can drop it for subsequent runs as little will change.).
+    
 6.  Check that R works as expected:
     ```{sh}
 make check
